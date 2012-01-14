@@ -24,6 +24,7 @@
 #include <geany/support.h>
 #include <memory.h>
 #include <ctype.h>
+#include <stdarg.h>
 #ifdef HAVE_LOCALE_H
 # include <locale.h>
 #endif
@@ -39,69 +40,33 @@
 #include <glib/gprintf.h>
 #include <gdk/gdkkeysyms.h>
 
-typedef struct rule_t rule_t;
-typedef struct action_t action_t;
+#include "caseconvert_types.h"
 
 typedef struct {
-  /** when converting to camel case, always upcase the first character */
+  /* when converting to camel case, always upcase the first character, ie:
+   *  CamelCase instead of camelCase
+   */
   gboolean  capitalize;
 
-  /** the registered conversion rules */
-  rule_t    *rules;
+  rule_t    *rules; /* the registered conversion rules */
 } config_t;
 
-typedef struct {
-  enum {
-    has_prefix = 0,
-    has_suffix,
-    always_true
-  } type;
-
-  gchar *value;
-} condition_t;
-
-struct action_t {
-  enum {
-    add_prefix = 0,
-    rem_prefix,
-    add_suffix,
-    rem_suffix
-  } type;
-
-  gchar     *value;
-  action_t  *next;
-};
-
-struct rule_t {
-  enum {
-    s2c,
-    c2s
-  } domain;
-
-  condition_t *condition;
-  action_t    *actions;
-  rule_t      *next;
-  gchar       *label;
-  gint        id;
-};
-
-enum {
-  KB_CONVERT_SELECTION,
-  KB_CONVERT_MORE,
-  KB_CONVERT_ALL,
-  KB_TEST,
-  KB_COUNT
-};
+/* must compile with -DVERBOSE to log */
+void cc_log(const char *fmt, ...);
 
 void cc_add_rule(rule_t *);
 void cc_rem_rule(gint id);
+rule_t* cc_get_rule(gint id);
+rule_t* cc_get_rules();
 
+/** converts case found within the editor's cursor selection */
 void cc_convert_selection();
-void cc_convert_range(int r_begin, int r_end, gchar const *txt, gint txtsz);
-void cc_convert_all();
 
-rule_t* cc_alloc_rule();
-void    cc_free_rule(rule_t**);
+/** converts all occurences of txt found in the specified range */
+void cc_convert_range(int r_begin, int r_end, gchar const *txt, gint txtsz, int flags);
+
+/** converts all occurences of the selected text found in the document */
+void cc_convert_all();
 
 /**
  * Helper for returning the selected text in the editor if the selection
@@ -112,5 +77,11 @@ void    cc_free_rule(rule_t**);
  * string (if any) must be freed by the caller.
  */
 gchar* cc_get_selected_text(gint* sz);
+
+/** reads plugin preferences and registers previously defined rules */
+void cc_load_settings();
+
+/** saves plugin preferences and all defined rules */
+void cc_save_settings();
 
 #endif

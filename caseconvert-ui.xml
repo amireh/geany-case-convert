@@ -693,4 +693,170 @@
       <action-widget response="0">ca_btn_document</action-widget>
     </action-widgets>
   </object>
+  <object class="GtkDialog" id="cc_dlg_edit_rules">
+    <property name="can_focus">False</property>
+    <property name="border_width">5</property>
+    <property name="title" translatable="yes">Case Convert - Edit Rules</property>
+    <property name="type_hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkVBox" id="dialog-vbox3">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkHButtonBox" id="dialog-action_area3">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="cc_er_btn_save">
+                <property name="label" translatable="yes">_Save</property>
+                <property name="use_action_appearance">False</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_underline">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">False</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="cc_er_btn_cancel">
+                <property name="label" translatable="yes">_Close</property>
+                <property name="use_action_appearance">False</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="use_underline">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">False</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="pack_type">end</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkTreeView" id="cc_er_rules_tree">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="model">cc_er_rules_list</property>
+            <property name="reorderable">True</property>
+            <property name="enable_tree_lines">True</property>
+            <child>
+              <object class="GtkTreeViewColumn" id="cc_er_list_id_col">
+                <property name="visible">False</property>
+                <property name="min_width">16</property>
+                <property name="title" translatable="yes">ID</property>
+                <child>
+                  <object class="GtkCellRendererText" id="cc_er_list_id_cell"/>
+                  <attributes>
+                    <attribute name="text">0</attribute>
+                  </attributes>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkTreeViewColumn" id="cc_er_list_enabled_col">
+                <property name="sizing">autosize</property>
+                <property name="title" translatable="yes">Enabled</property>
+                <property name="clickable">True</property>
+                <property name="sort_indicator">True</property>
+                <property name="sort_column_id">1</property>
+                <child>
+                  <object class="GtkCellRendererToggle" id="cc_er_list_enabled_cell"/>
+                  <attributes>
+                    <attribute name="active">1</attribute>
+                  </attributes>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkTreeViewColumn" id="cc_er_list_label_col">
+                <property name="resizable">True</property>
+                <property name="title" translatable="yes">Label</property>
+                <property name="expand">True</property>
+                <child>
+                  <object class="GtkCellRendererText" id="cc_er_list_label_cell"/>
+                  <attributes>
+                    <attribute name="text">2</attribute>
+                  </attributes>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkTreeViewColumn" id="cc_er_list_cnd_col">
+                <property name="resizable">True</property>
+                <property name="title" translatable="yes">Condition</property>
+                <child>
+                  <object class="GtkCellRendererText" id="cc_er_list_cnd_cell"/>
+                  <attributes>
+                    <attribute name="text">3</attribute>
+                  </attributes>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkTreeViewColumn" id="cc_er_list_act_col">
+                <property name="resizable">True</property>
+                <property name="title" translatable="yes">Actions</property>
+                <property name="expand">True</property>
+                <child>
+                  <object class="GtkCellRendererText" id="cc_er_list_act_cell"/>
+                  <attributes>
+                    <attribute name="text">4</attribute>
+                  </attributes>
+                </child>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <placeholder/>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="0">cc_er_btn_save</action-widget>
+      <action-widget response="0">cc_er_btn_cancel</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkListStore" id="cc_er_rules_list">
+    <columns>
+      <!-- column-name ID -->
+      <column type="gint"/>
+      <!-- column-name Enabled -->
+      <column type="gboolean"/>
+      <!-- column-name Label -->
+      <column type="gchararray"/>
+      <!-- column-name Condition -->
+      <column type="gchararray"/>
+      <!-- column-name Actions -->
+      <column type="gchararray"/>
+    </columns>
+    <data>
+      <row>
+        <col id="0">0</col>
+        <col id="1">False</col>
+        <col id="2" translatable="yes">Foobar</col>
+        <col id="3" translatable="yes">Begins with 'm'</col>
+        <col id="4" translatable="yes">Rem Prefix 'm', Add Suffix '_'</col>
+      </row>
+    </data>
+  </object>
 </interface>

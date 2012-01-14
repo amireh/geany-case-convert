@@ -17,7 +17,7 @@
  *  along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "caseconvert-ui.h"
+#include "caseconvert_ui.h"
 #include "caseconvert.h"
 
 typedef struct {
@@ -49,6 +49,26 @@ typedef struct {
 
 } add_rule_dlg_t;
 
+enum ER_COLS {
+    ER_COL_ID,
+    ER_COL_ENABLED,
+    ER_COL_LABEL,
+    ER_COL_CND,
+    ER_COL_ACT
+  };
+
+typedef struct {
+
+  GtkDialog *dlg;
+
+  GtkButton *btn_cancel;
+  GtkButton *btn_save;
+
+  GtkCellRendererText* cell_label;
+  GtkCellRendererToggle* cell_enabled;
+
+} edit_rules_dlg_t;
+
 typedef struct {
   GtkDialog *dlg;
 
@@ -78,12 +98,15 @@ extern GeanyPlugin    *geany_plugin;
 extern GeanyData      *geany_data;
 extern GeanyFunctions *geany_functions;
 
-static GtkBuilder     *builder = NULL;
-static GtkWidget      *main_menu_item = NULL;
-static menu_items_t   *menu_items = NULL;
-static add_rule_dlg_t *add_rule_dlg = NULL;
-static convert_more_dlg_t  *convert_more_dlg = NULL;
-static const char     *ui_file_path = "/home/kandie/Workspace/Projects/geany/caseconvert/caseconvert-ui.xml";
+static GtkBuilder         *builder = NULL;
+static GtkWidget          *main_menu_item = NULL;
+static menu_items_t       *menu_items = NULL;
+static add_rule_dlg_t     *add_rule_dlg = NULL;
+static edit_rules_dlg_t   *edit_rules_dlg = NULL;
+static convert_more_dlg_t *convert_more_dlg = NULL;
+static const char         *ui_file_path = "/home/kandie/Workspace/Projects/geany/caseconvert/caseconvert-ui.xml";
+
+static void populate_rule_list();
 
 /* UI event handlers */
 static void on_add_rule_btn_create(GtkWidget*);
@@ -91,7 +114,16 @@ static void on_add_rule_btn_create(GtkWidget*);
 static void on_convert_more_btn_selection(GtkWidget*);
 static void on_convert_more_btn_document(GtkWidget*);
 
-/* Keybinding(s) */
+static void on_er_enabled_toggled(GtkCellRendererToggle *cell,
+                                   gchar                 *path_string,
+                                   gpointer               user_data);
+static void on_er_label_edited (GtkCellRendererText *cell,
+                                gchar               *path_string,
+                                gchar               *new_text,
+                                gpointer             user_data);
+static void on_er_btn_save();
+
+/* keybindings */
 PLUGIN_KEY_GROUP(convert_case, KB_COUNT)
 
 void cc_ui_init()
@@ -147,20 +179,20 @@ void cc_ui_init()
   err = NULL;
   if (gtk_builder_add_from_file(builder, ui_file_path, &err) == 0)
   {
-    g_printf("unable to read GTK UI definition\n");
+    cc_log("unable to read GTK UI definition\n");
     if (err->domain == GTK_BUILDER_ERROR)
-      g_printf("\tcause: builder error '%s'\n", err->message);
+      cc_log("\tcause: builder error '%s'\n", err->message);
     else if (err->domain == G_MARKUP_ERROR)
-      g_printf("\tcause: markup error '%s'\n", err->message);
+      cc_log("\tcause: markup error '%s'\n", err->message);
     else if (err->domain == G_FILE_ERROR)
-      g_printf("\tcause: file error '%s'\n", err->message);
+      cc_log("\tcause: file error '%s'\n", err->message);
     else
-      g_printf("\tcause: unknown error\n");
+      cc_log("\tcause: unknown error\n");
 
     return;
   }
 
-  g_printf("read GTK UI definition successfully, binding widgets\n");
+  cc_log("read GTK UI definition successfully, binding widgets\n");
 
   /* set up the Add Rule dialog */
   add_rule_dlg = g_malloc(sizeof(add_rule_dlg_t));
@@ -211,6 +243,25 @@ void cc_ui_init()
   g_signal_connect(convert_more_dlg->btn_selection, "clicked", G_CALLBACK(on_convert_more_btn_selection), NULL);
   g_signal_connect(convert_more_dlg->btn_document, "clicked", G_CALLBACK(on_convert_more_btn_document), NULL);
 
+  /* set up the Edit Rules dialog */
+  edit_rules_dlg = g_malloc(sizeof(edit_rules_dlg_t));
+
+  edit_rules_dlg->dlg = (GtkDialog*)(gtk_builder_get_object(builder, "cc_dlg_edit_rules"));
+  g_signal_connect(edit_rules_dlg->dlg, "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
+
+  edit_rules_dlg->btn_cancel  = (GtkButton*)(gtk_builder_get_object(builder, "cc_er_btn_cancel"));
+  edit_rules_dlg->btn_save    = (GtkButton*)(gtk_builder_get_object(builder, "cc_er_btn_save"));
+
+  edit_rules_dlg->cell_label = (GtkCellRendererText*)(gtk_builder_get_object(builder, "cc_er_list_label_cell"));
+  g_object_set(edit_rules_dlg->cell_label, "editable", TRUE, NULL);
+  g_signal_connect(edit_rules_dlg->cell_label, "edited", G_CALLBACK(on_er_label_edited), NULL);
+
+  edit_rules_dlg->cell_enabled = (GtkCellRendererToggle*)(gtk_builder_get_object(builder, "cc_er_list_enabled_cell"));
+  g_signal_connect(edit_rules_dlg->cell_enabled, "toggled", G_CALLBACK(on_er_enabled_toggled), NULL);
+
+  g_signal_connect(edit_rules_dlg->btn_save, "clicked", G_CALLBACK(on_er_btn_save), NULL);
+  g_signal_connect(edit_rules_dlg->btn_cancel, "clicked", G_CALLBACK(cc_ui_hide_edit_rules_dialog), NULL);
+
   /* setup keybindings */
   keybindings_set_item(plugin_key_group, KB_CONVERT_SELECTION, cc_convert_selection,
      GDK_9, GDK_CONTROL_MASK, "cc_convert_selection", _("Convert Selection"), menu_items->convert_selection);
@@ -218,6 +269,7 @@ void cc_ui_init()
      GDK_9, GDK_CONTROL_MASK, "cc_convert_all", _("Convert All"), menu_items->convert_all);
   keybindings_set_item(plugin_key_group, KB_CONVERT_MORE, cc_ui_show_convert_more_dialog,
      GDK_9, GDK_CONTROL_MASK, "cc_convert_more", _("Convert More"), menu_items->convert_more);
+
 }
 
 void cc_ui_cleanup()
@@ -228,6 +280,13 @@ void cc_ui_cleanup()
     g_free(add_rule_dlg);
     add_rule_dlg = NULL;
   }
+
+  if (edit_rules_dlg) {
+    gtk_widget_destroy((GtkWidget*)edit_rules_dlg->dlg);
+    g_free(edit_rules_dlg);
+    edit_rules_dlg = NULL;
+  }
+
   if (convert_more_dlg) {
     gtk_widget_destroy((GtkWidget*)convert_more_dlg->dlg);
     g_free(convert_more_dlg);
@@ -240,7 +299,11 @@ void cc_ui_cleanup()
   }
 
   builder = NULL;
-  gtk_widget_destroy(main_menu_item);
+
+  if (main_menu_item) {
+    gtk_widget_destroy(main_menu_item);
+    main_menu_item = NULL;
+  }
 }
 
 void cc_ui_show_add_rule_dialog()
@@ -261,12 +324,19 @@ void cc_ui_hide_add_rule_dialog()
 
 void cc_ui_show_edit_rules_dialog()
 {
-  /* TODO: implement */
+  if (edit_rules_dlg == NULL)
+    return;
+
+  gtk_widget_show_all((GtkWidget*)edit_rules_dlg->dlg);
+  populate_rule_list();
 }
 
 void cc_ui_hide_edit_rules_dialog()
 {
-  /* TODO: implement */
+  if (edit_rules_dlg == NULL)
+    return;
+
+  gtk_widget_hide((GtkWidget*)edit_rules_dlg->dlg);
 }
 
 void cc_ui_show_convert_more_dialog()
@@ -304,33 +374,41 @@ void on_add_rule_btn_create(G_GNUC_UNUSED GtkWidget* dlg)
 
   /* TODO: validate entries before creating the rule */
 
+  if (!rule) return;
+
   /* get domain */
   {
     gboolean is_c2s = gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_domain_c2s);
-    rule->domain = is_c2s ? c2s : s2c;
+    rule->domain = is_c2s ? CC_RULE_C2S : CC_RULE_S2C;
   }
 
   /* parse the condition */
   {
-    cnd = g_malloc(sizeof(condition_t));
+    cnd = cc_alloc_cnd();
+    if (!cnd)
+    {
+      cc_free_rule(&rule);
+      return;
+    }
+
     cnd->value = g_strdup(gtk_entry_get_text(add_rule_dlg->txt_cnd));
     rule->condition = cnd;
 
-    g_printf("cond value: %s => %s\n", gtk_entry_get_text(add_rule_dlg->txt_cnd), cnd->value);
+    cc_log("cond value: %s => %s\n", gtk_entry_get_text(add_rule_dlg->txt_cnd), cnd->value);
 
     if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_cnd_has_prefix))
-      cnd->type = has_prefix;
+      cnd->type = CC_CND_HAS_PREFIX;
     else if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_cnd_has_suffix))
-      cnd->type = has_suffix;
+      cnd->type = CC_CND_HAS_SUFFIX;
     else
-      cnd->type = always_true;
+      cnd->type = CC_CND_ALWAYS_TRUE;
   }
 
   /* parse the actions */
   {
     if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_act_rem_prefix)) {
-      act = g_malloc(sizeof(action_t));
-      act->type = rem_prefix;
+      act = cc_alloc_act();
+      act->type = CC_ACT_REM_PREFIX;
       act->value = g_strdup(gtk_entry_get_text(add_rule_dlg->txt_act_rem_prefix));
       act->next = NULL;
 
@@ -340,8 +418,8 @@ void on_add_rule_btn_create(G_GNUC_UNUSED GtkWidget* dlg)
     if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_act_rem_suffix)) {
       tmpact = act;
 
-      act = g_malloc(sizeof(action_t));
-      act->type = rem_suffix;
+      act = cc_alloc_act();
+      act->type = CC_ACT_REM_SUFFIX;
       act->value = g_strdup(gtk_entry_get_text(add_rule_dlg->txt_act_rem_suffix));
       act->next = NULL;
 
@@ -357,8 +435,8 @@ void on_add_rule_btn_create(G_GNUC_UNUSED GtkWidget* dlg)
     if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_act_add_prefix)) {
       tmpact = act;
 
-      act = g_malloc(sizeof(action_t));
-      act->type = add_prefix;
+      act = cc_alloc_act();
+      act->type = CC_ACT_ADD_PREFIX;
       act->value = g_strdup(gtk_entry_get_text(add_rule_dlg->txt_act_add_prefix));
       act->next = NULL;
 
@@ -374,8 +452,8 @@ void on_add_rule_btn_create(G_GNUC_UNUSED GtkWidget* dlg)
     if (gtk_toggle_button_get_active((GtkToggleButton*)add_rule_dlg->opt_act_add_suffix)) {
       tmpact = act;
 
-      act = g_malloc(sizeof(action_t));
-      act->type = add_suffix;
+      act = cc_alloc_act();
+      act->type = CC_ACT_ADD_SUFFIX;
       act->value = g_strdup(gtk_entry_get_text(add_rule_dlg->txt_act_add_suffix));
       act->next = NULL;
 
@@ -399,16 +477,19 @@ void on_add_rule_btn_create(G_GNUC_UNUSED GtkWidget* dlg)
 
 void on_convert_more_btn_selection(G_GNUC_UNUSED GtkWidget* dlg)
 {
+  ScintillaObject *sci = NULL;
+  gint begin = 0;
+  gint end = 0;
+  const gchar *txt = NULL;
+  guint txtsz = 0;
+  int flags = 0;
+
   /* sanity check */
   if (document_get_current() == NULL) {
     return;
   }
 
-  ScintillaObject *sci = document_get_current()->editor->sci;
-  gint begin = 0;
-  gint end = 0;
-  const gchar *txt = NULL;
-  guint txtsz;
+  sci = document_get_current()->editor->sci;
 
   /* verify that the search text field isn't empty */
   txt = gtk_entry_get_text(convert_more_dlg->txt_search);
@@ -420,7 +501,14 @@ void on_convert_more_btn_selection(G_GNUC_UNUSED GtkWidget* dlg)
   begin = sci_get_selection_start(sci);
   end = sci_get_selection_end(sci);
 
-  cc_convert_range(begin, end, txt, txtsz + 1);
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_case_sensitive))
+    flags |= SCFIND_MATCHCASE;
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_whole_word))
+    flags |= SCFIND_WHOLEWORD;
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_start_word))
+    flags |= SCFIND_WORDSTART;
+
+  cc_convert_range(begin, end, txt, txtsz + 1, flags);
 }
 
 void on_convert_more_btn_document(G_GNUC_UNUSED GtkWidget* dlg)
@@ -428,6 +516,7 @@ void on_convert_more_btn_document(G_GNUC_UNUSED GtkWidget* dlg)
   ScintillaObject *sci = document_get_current()->editor->sci;
   const gchar *txt = NULL;
   guint txtsz;
+  int flags = 0;
 
   /* sanity check */
   if (document_get_current() == NULL) {
@@ -441,5 +530,161 @@ void on_convert_more_btn_document(G_GNUC_UNUSED GtkWidget* dlg)
   if (!txt || txtsz == 1)
     return;
 
-  cc_convert_range(0, sci_get_length(sci)+1, txt, txtsz + 1);
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_case_sensitive))
+    flags |= SCFIND_MATCHCASE;
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_whole_word))
+    flags |= SCFIND_WHOLEWORD;
+  if (gtk_toggle_button_get_active((GtkToggleButton*)convert_more_dlg->opt_start_word))
+    flags |= SCFIND_WORDSTART;
+
+  cc_convert_range(0, sci_get_length(sci)+1, txt, txtsz + 1, flags);
+}
+
+static void on_er_enabled_toggled(G_GNUC_UNUSED GtkCellRendererToggle *cell,
+                                  gchar *path_string,
+                                  G_GNUC_UNUSED gpointer user_data)
+{
+  GtkListStore *liststore = (GtkListStore*)gtk_builder_get_object(builder, "cc_er_rules_list");
+  GtkTreeIter iter;
+  gboolean res = gtk_tree_model_get_iter_from_string((GtkTreeModel*)liststore, &iter, path_string);
+
+  if (res == TRUE) {
+    gboolean flag = FALSE;
+    gtk_tree_model_get((GtkTreeModel*)liststore, &iter, ER_COL_ENABLED, &flag, -1);
+
+    gtk_list_store_set(liststore, &iter, ER_COL_ENABLED, (gboolean) !flag, -1);
+    cc_log("rule has been %s!\n", flag ? "disabled" : "enabled");
+  }
+
+  return;
+}
+
+
+static void on_er_label_edited (G_GNUC_UNUSED GtkCellRendererText *cell,
+                                gchar *path_string,
+                                gchar *new_text,
+                                G_GNUC_UNUSED gpointer user_data)
+{
+  GtkListStore *liststore = (GtkListStore*)gtk_builder_get_object(builder, "cc_er_rules_list");
+  GtkTreeIter iter;
+  gboolean res = gtk_tree_model_get_iter_from_string((GtkTreeModel*)liststore, &iter, path_string);
+
+  if (res == TRUE) {
+    gtk_list_store_set(liststore, &iter, ER_COL_LABEL, new_text, -1);
+    cc_log("rule label has been modified to '%s'!\n", new_text);
+  }
+}
+
+static gboolean
+traverse_rules(GtkTreeModel *model,
+               G_GNUC_UNUSED GtkTreePath  *path,
+               GtkTreeIter  *iter,
+               G_GNUC_UNUSED gpointer      user_data)
+{
+  gchar *in_label;
+  gint in_id;
+  gboolean in_enabled;
+  rule_t *rule = NULL;
+
+  gtk_tree_model_get (model, iter,
+                      ER_COL_ID, &in_id,
+                      ER_COL_LABEL, &in_label,
+                      ER_COL_ENABLED, &in_enabled,
+                      -1);
+
+  rule = cc_get_rule(in_id);
+
+  if (rule) {
+    cc_log("Rule (%d) '%s' => %s\n", in_id, in_label, in_enabled ? "enabled" : "disabled");
+    rule->label = g_strdup(in_label);
+    rule->enabled = in_enabled;
+  }
+
+  g_free(in_label);
+
+  return FALSE; /* get next row */
+}
+
+static void on_er_btn_save()
+{
+  GtkListStore *liststore = (GtkListStore*)gtk_builder_get_object(builder, "cc_er_rules_list");
+  gtk_tree_model_foreach(GTK_TREE_MODEL(liststore), traverse_rules, NULL);
+
+  cc_save_settings();
+}
+
+static void populate_rule_list()
+{
+  rule_t *rule;
+  GtkListStore *liststore = (GtkListStore*)gtk_builder_get_object(builder, "cc_er_rules_list");
+  /* first, remove all entries */
+  gtk_list_store_clear(liststore);
+
+  for (rule = cc_get_rules(); rule != NULL; rule = rule->next)
+  {
+    GtkTreeIter   iter;
+
+    gchar *cnd_txt = NULL, *act_txt = NULL;
+
+    /* condition to human-readable string */
+    {
+      if (rule->condition->type == CC_CND_HAS_PREFIX)
+      {
+        cnd_txt = g_malloc(sizeof(gchar) * (strlen("Begins with ") + strlen(rule->condition->value) + 1));
+        g_sprintf(cnd_txt, "Begins with %s", rule->condition->value);
+      }
+      else if (rule->condition->type == CC_CND_HAS_SUFFIX)
+      {
+        cnd_txt = g_malloc(sizeof(gchar) * (strlen("Ends with ") + strlen(rule->condition->value) + 1));
+        g_sprintf(cnd_txt, "Ends with %s", rule->condition->value);
+      }
+      else if (rule->condition->type == CC_CND_ALWAYS_TRUE)
+      {
+        cnd_txt = g_strdup("Always true");
+      }
+      else
+      {
+        cnd_txt = g_strdup("Invalid!");
+      }
+    }
+
+    /* actions to human-readable string */
+    {
+      action_t *a = NULL;
+      for (a = rule->actions; a != NULL; a = a->next) {
+        gchar *msg = NULL;
+        switch (a->type)
+        {
+          case CC_ACT_ADD_PREFIX: msg = g_strdup("Add Prefix "); break;
+          case CC_ACT_ADD_SUFFIX: msg = g_strdup("Add Suffix "); break;
+          case CC_ACT_REM_PREFIX: msg = g_strdup("Rem Prefix "); break;
+          case CC_ACT_REM_SUFFIX: msg = g_strdup("Rem Suffix "); break;
+          default:
+          msg = g_strdup("Invalid");
+        }
+
+        if (act_txt) {
+          gchar *tmp = g_strdup(act_txt);
+          act_txt = g_malloc(sizeof(gchar) * (strlen(tmp) + strlen(msg) + strlen(a->value) + 4));
+          sprintf(act_txt, "%s, %s %s", tmp, msg, a->value);
+          g_free(tmp);
+        } else {
+          act_txt = g_malloc(sizeof(gchar) * (strlen(msg) + strlen(a->value) + 2));
+          sprintf(act_txt, "%s %s", msg, a->value);
+        }
+      }
+    }
+
+    gtk_list_store_append(liststore, &iter);
+    gtk_list_store_set (liststore, &iter,
+                        ER_COL_ID,      rule->id,
+                        ER_COL_ENABLED, rule->enabled,
+                        ER_COL_LABEL,   rule->label ? rule->label : "Unlabelled",
+                        ER_COL_CND,     cnd_txt,
+                        ER_COL_ACT,     act_txt,
+                        -1);
+
+    g_free(cnd_txt);
+    g_free(act_txt);
+  }
 }

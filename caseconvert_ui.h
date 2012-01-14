@@ -38,6 +38,14 @@
 #include <glib/gprintf.h>
 #include <gdk/gdkkeysyms.h>
 
+enum {
+  KB_CONVERT_SELECTION,
+  KB_CONVERT_MORE,
+  KB_CONVERT_ALL,
+  KB_TEST,
+  KB_COUNT
+};
+
 void cc_ui_init();
 void cc_ui_cleanup();
 
