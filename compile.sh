@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-#CFLAGS="-Wall -Wextra -ansi -pedantic -g"
-CFLAGS="-Wall -Wextra -ansi -pedantic -O2"
+CFLAGS="-Wall -Wextra -ansi -pedantic -g -DVERBOSE"
+#~ CFLAGS="-Wall -Wextra -ansi -pedantic -O2"
 gcc -c caseconvert.c $CFLAGS -fPIC `pkg-config --cflags geany` -o caseconvert.o
 gcc -c caseconvert_ui.c $CFLAGS -fPIC `pkg-config --cflags geany` -o caseconvert_ui.o
 gcc -c caseconvert_types.c $CFLAGS -fPIC `pkg-config --cflags geany` -o caseconvert_types.o
